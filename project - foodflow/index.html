@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FoodFlow – Surplus Food Redistribution Map</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:   #22c55e;
+      --green-d: #16a34a;
+      --green-g: #dcfce7;
+      --red:     #ef4444;
+      --red-d:   #dc2626;
+      --red-g:   #fee2e2;
+      --bg:      #f8fafc;
+      --surface: #ffffff;
+      --border:  #e2e8f0;
+      --text:    #0f172a;
+      --muted:   #64748b;
+      --accent:  #f97316;
+      --header-h: 88px;
+      --bar-h:   56px;
+    }
+
+    html, body { height: 100%; font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); }
+
+    /* ── HEADER ── */
+    header {
+      height: var(--header-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 28px;
+      gap: 16px;
+      position: relative;
+      z-index: 1000;
+      box-shadow: 0 1px 12px rgba(0,0,0,.06);
+    }
+
+    .logo-pill {
+      display: flex; align-items: center; gap: 10px;
+      background: linear-gradient(135deg,#f97316,#facc15);
+      border-radius: 50px;
+      padding: 6px 16px 6px 8px;
+      flex-shrink: 0;
+    }
+    .logo-icon {
+      width: 32px; height: 32px; background: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .logo-text {
+      font-family: 'Sora', sans-serif;
+      font-weight: 800; font-size: 18px;
+      color: #fff; letter-spacing: -.3px;
+    }
+
+    .header-info { flex: 1; }
+    .header-info h1 {
+      font-family: 'Sora', sans-serif;
+      font-size: 17px; font-weight: 700;
+      color: var(--text);
+    }
+    .header-info p {
+      font-size: 13px; color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .live-badge {
+      display: flex; align-items: center; gap: 7px;
+      background: #f0fdf4; border: 1px solid #bbf7d0;
+      border-radius: 50px; padding: 6px 14px;
+      font-size: 12px; font-weight: 600; color: var(--green-d);
+    }
+    .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.5)} 50%{box-shadow:0 0 0 6px rgba(34,197,94,0)} }
+
+    /* ── FILTER BAR ── */
+    .filter-bar {
+      height: var(--bar-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 28px; gap: 10px;
+      position: relative; z-index: 999;
+    }
+    .filter-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin-right: 4px; }
+
+    .filter-btn {
+      height: 34px; border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      padding: 0 16px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px; font-weight: 500;
+      color: var(--muted); cursor: pointer;
+      transition: all .18s;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .filter-btn .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .filter-btn:hover { border-color: #94a3b8; color: var(--text); transform: translateY(-1px); }
+    .filter-btn.active-all  { background: var(--text); border-color: var(--text); color: #fff; }
+    .filter-btn.active-green{ background: var(--green-g); border-color: var(--green); color: var(--green-d); }
+    .filter-btn.active-red  { background: var(--red-g);   border-color: var(--red);   color: var(--red-d);   }
+
+    .stats { margin-left: auto; display: flex; gap: 18px; }
+    .stat { text-align: right; }
+    .stat-num { font-family:'Sora',sans-serif; font-size:18px; font-weight:800; line-height:1; }
+    .stat-num.g { color: var(--green-d); }
+    .stat-num.r { color: var(--red-d); }
+    .stat-lbl { font-size:11px; color: var(--muted); margin-top:2px; }
+
+    /* ── MAP ── */
+    #map {
+      height: calc(100vh - var(--header-h) - var(--bar-h));
+      width: 100%;
+    }
+
+    /* ── LEGEND ── */
+    .legend {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.1);
+      font-size: 13px;
+    }
+    .legend-title { font-family:'Sora',sans-serif; font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin-bottom:10px; }
+    .legend-item  { display:flex; align-items:center; gap:10px; margin-bottom:8px; font-weight:500; color:var(--text); }
+    .legend-item:last-child { margin-bottom:0; }
+    .legend-dot   { width:13px; height:13px; border-radius:50%; border:2.5px solid; flex-shrink:0; }
+    .lg { background:var(--green-g); border-color:var(--green-d); }
+    .lr { background:var(--red-g);   border-color:var(--red-d);   }
+
+    /* ── CUSTOM POPUPS ── */
+    .leaflet-popup-content-wrapper {
+      border-radius: 14px !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,.18) !important;
+      border: none !important;
+      padding: 0 !important;
+      overflow: hidden;
+    }
+    .leaflet-popup-content { margin: 0 !important; width: 240px !important; }
+    .leaflet-popup-tip-container { display:none; }
+    .leaflet-popup-close-button { color: #94a3b8 !important; font-size:18px !important; right:10px !important; top:8px !important; }
+
+    .popup-card { padding: 18px 20px; }
+    .popup-type { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+    .popup-type.green { color: var(--green-d); }
+    .popup-type.red   { color: var(--red-d); }
+    .popup-name { font-family:'Sora',sans-serif; font-weight:700; font-size:15px; color:var(--text); margin-bottom:12px; line-height:1.3; }
+    .popup-rows { display:flex; flex-direction:column; gap:7px; }
+    .popup-row  { display:flex; align-items:center; gap:9px; font-size:12.5px; color:var(--muted); }
+    .popup-row span:first-child { font-size:15px; width:20px; text-align:center; flex-shrink:0; }
+    .popup-row b { color:var(--text); font-weight:600; }
+    .popup-footer { margin-top:14px; padding-top:12px; border-top:1px solid var(--border); }
+    .popup-btn {
+      width:100%; height:34px; border-radius:8px; border:none; cursor:pointer;
+      font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600;
+      transition: all .18s;
+    }
+    .popup-btn.green { background:var(--green); color:#fff; }
+    .popup-btn.green:hover { background:var(--green-d); }
+    .popup-btn.red   { background:var(--red); color:#fff; }
+    .popup-btn.red:hover   { background:var(--red-d); }
+
+    /* Custom marker icons */
+    .custom-marker {
+      width: 36px; height: 36px;
+      border-radius: 50% 50% 50% 4px;
+      transform: rotate(-45deg);
+      display:flex; align-items:center; justify-content:center;
+      border: 3px solid rgba(255,255,255,.9);
+      box-shadow: 0 3px 12px rgba(0,0,0,.25);
+      font-size:16px;
+    }
+    .custom-marker .inner { transform:rotate(45deg); line-height:1; }
+    .marker-green { background: var(--green); }
+    .marker-red   { background: var(--red); }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo-pill">
+    <div class="logo-icon">🍱</div>
+    <span class="logo-text">FoodFlow</span>
+  </div>
+  <div class="header-info">
+    <h1>Surplus Food Redistribution Map</h1>
+    <p>Connecting surplus food sources with hunger zones in real time.</p>
+  </div>
+  <div class="live-badge">
+    <div class="pulse"></div>
+    Live · Chennai
+  </div>
+</header>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <span class="filter-label">Filter</span>
+  <button class="filter-btn active-all" id="btn-all" onclick="filterMarkers('all')">
+    Show All
+  </button>
+  <button class="filter-btn" id="btn-green" onclick="filterMarkers('surplus')">
+    <span class="dot" style="background:var(--green)"></span>
+    Food Available
+  </button>
+  <button class="filter-btn" id="btn-red" onclick="filterMarkers('hunger')">
+    <span class="dot" style="background:var(--red)"></span>
+    Food Needed
+  </button>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-num g" id="count-green">—</div>
+      <div class="stat-lbl">Surplus Sources</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num r" id="count-red">—</div>
+      <div class="stat-lbl">Hunger Zones</div>
+    </div>
+  </div>
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// ── DATA ─────────────────────────────────────────────────────────────────────
+const locations = [
+  // SURPLUS (green)
+  {
+    type:"surplus", name:"Anna Nagar Restaurant", icon:"🍛",
+    lat:13.0850, lng:80.2101,
+    meals:52, time:"before 9:00 PM",
+    items:"Rice, Dal, Chapati",
+    contact:"Ravi Kumar"
+  },
+  {
+    type:"surplus", name:"T Nagar Grand Hotel", icon:"🏨",
+    lat:13.0418, lng:80.2341,
+    meals:80, time:"before 8:30 PM",
+    items:"Biryani, Curries, Bread",
+    contact:"Meena Devi"
+  },
+  {
+    type:"surplus", name:"Velachery College Canteen", icon:"🎓",
+    lat:12.9815, lng:80.2180,
+    meals:120, time:"before 4:00 PM",
+    items:"Idli, Sambar, Vada",
+    contact:"Dr. Suresh"
+  },
+  {
+    type:"surplus", name:"Adyar Café & Bakery", icon:"☕",
+    lat:13.0063, lng:80.2574,
+    meals:35, time:"before 10:00 PM",
+    items:"Bread, Pastries, Sandwiches",
+    contact:"Lakshmi S"
+  },
+  {
+    type:"surplus", name:"OMR Tech Park Food Court", icon:"🏢",
+    lat:12.9279, lng:80.2304,
+    meals:200, time:"before 7:00 PM",
+    items:"Mixed meals, Snacks",
+    contact:"HR Dept."
+  },
+  {
+    type:"surplus", name:"Egmore Star Catering", icon:"⭐",
+    lat:13.0781, lng:80.2613,
+    meals:65, time:"before 9:30 PM",
+    items:"Rice, Rasam, Papad",
+    contact:"Anand M"
+  },
+  {
+    type:"surplus", name:"Porur Wedding Hall", icon:"🎊",
+    lat:13.0349, lng:80.1572,
+    meals:300, time:"before 11:00 PM",
+    items:"Full meals, Sweets",
+    contact:"Event Manager"
+  },
+
+  // HUNGER (red)
+  {
+    type:"hunger", name:"Saidapet Shelter Home", icon:"🏠",
+    lat:13.0210, lng:80.2253,
+    meals:70, time:"by 8:00 PM",
+    items:"All food accepted",
+    contact:"Sister Maria"
+  },
+  {
+    type:"hunger", name:"Perambur Community Center", icon:"🏘️",
+    lat:13.1148, lng:80.2473,
+    meals:90, time:"by 7:30 PM",
+    items:"Cooked meals preferred",
+    contact:"Mr. Selvam"
+  },
+  {
+    type:"hunger", name:"Royapuram Coastal Area", icon:"🌊",
+    lat:13.1117, lng:80.2937,
+    meals:110, time:"by 6:30 PM",
+    items:"Any food welcome",
+    contact:"Local Volunteer"
+  },
+  {
+    type:"hunger", name:"Tambaram NGO Kitchen", icon:"💛",
+    lat:12.9229, lng:80.1275,
+    meals:85, time:"by 8:30 PM",
+    items:"Rice & curry preferred",
+    contact:"NGO Helpline"
+  },
+  {
+    type:"hunger", name:"Triplicane Relief Center", icon:"🕌",
+    lat:13.0596, lng:80.2763,
+    meals:60, time:"by 9:00 PM",
+    items:"All food accepted",
+    contact:"Imran Sheikh"
+  },
+  {
+    type:"hunger", name:"Washermanpet Children Home", icon:"🧒",
+    lat:13.1205, lng:80.2845,
+    meals:45, time:"by 7:00 PM",
+    items:"Nutritious meals needed",
+    contact:"Mrs. Vasantha"
+  }
+];
+
+// ── MAP INIT ──────────────────────────────────────────────────────────────────
+const map = L.map('map', {
+  center: [13.0827, 80.2707],
+  zoom: 12,
+  zoomControl: false
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  maxZoom: 19
+}).addTo(map);
+
+// Custom zoom control placement
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+// ── LEGEND ────────────────────────────────────────────────────────────────────
+const legend = L.control({ position: 'bottomleft' });
+legend.onAdd = () => {
+  const d = L.DomUtil.create('div','legend');
+  d.innerHTML = `
+    <div class="legend-title">Map Legend</div>
+    <div class="legend-item"><div class="legend-dot lg"></div> Food Available (Surplus)</div>
+    <div class="legend-item"><div class="legend-dot lr"></div> Food Needed (Hunger Zone)</div>
+  `;
+  return d;
+};
+legend.addTo(map);
+
+// ── MARKER ICON FACTORY ───────────────────────────────────────────────────────
+function makeIcon(type, emoji) {
+  const cls = type === 'surplus' ? 'marker-green' : 'marker-red';
+  const html = `<div class="custom-marker ${cls}"><div class="inner">${emoji}</div></div>`;
+  return L.divIcon({ html, className:'', iconSize:[36,36], iconAnchor:[18,36], popupAnchor:[0,-38] });
+}
+
+// ── POPUP FACTORY ─────────────────────────────────────────────────────────────
+function makePopup(loc) {
+  const isG = loc.type === 'surplus';
+  const typeLabel = isG ? '🟢 Food Surplus' : '🔴 Hunger Zone';
+  const btnLabel  = isG ? '📦 Arrange Pickup' : '🤝 Send Food Here';
+  const cls = isG ? 'green' : 'red';
+  return `
+    <div class="popup-card">
+      <div class="popup-type ${cls}">${typeLabel}</div>
+      <div class="popup-name">${loc.icon} ${loc.name}</div>
+      <div class="popup-rows">
+        <div class="popup-row"><span>🍽️</span><span><b>${loc.meals} meals</b> ${isG ? 'available' : 'needed'}</span></div>
+        <div class="popup-row"><span>⏰</span><span>${isG ? 'Pickup' : 'Delivery'} ${loc.time}</span></div>
+        <div class="popup-row"><span>🥘</span><span>${loc.items}</span></div>
+        <div class="popup-row"><span>👤</span><span>Contact: <b>${loc.contact}</b></span></div>
+      </div>
+      <div class="popup-footer">
+        <button class="popup-btn ${cls}" onclick="alert('Feature coming soon! This is a demo.')">${btnLabel}</button>
+      </div>
+    </div>`;
+}
+
+// ── RENDER MARKERS ────────────────────────────────────────────────────────────
+const surplusMarkers = [];
+const hungerMarkers  = [];
+
+locations.forEach(loc => {
+  const marker = L.marker([loc.lat, loc.lng], { icon: makeIcon(loc.type, loc.icon) })
+    .bindPopup(makePopup(loc), { maxWidth: 260 });
+  if (loc.type === 'surplus') surplusMarkers.push(marker);
+  else                        hungerMarkers.push(marker);
+  marker.addTo(map);
+});
+
+// Update stat counters
+document.getElementById('count-green').textContent = surplusMarkers.length;
+document.getElementById('count-red').textContent   = hungerMarkers.length;
+
+// ── FILTER ────────────────────────────────────────────────────────────────────
+function filterMarkers(mode) {
+  const btnAll   = document.getElementById('btn-all');
+  const btnGreen = document.getElementById('btn-green');
+  const btnRed   = document.getElementById('btn-red');
+
+  btnAll.className   = 'filter-btn';
+  btnGreen.className = 'filter-btn';
+  btnRed.className   = 'filter-btn';
+
+  if (mode === 'all') {
+    btnAll.className = 'filter-btn active-all';
+    surplusMarkers.forEach(m => m.addTo(map));
+    hungerMarkers.forEach(m  => m.addTo(map));
+  } else if (mode === 'surplus') {
+    btnGreen.className = 'filter-btn active-green';
+    surplusMarkers.forEach(m => m.addTo(map));
+    hungerMarkers.forEach(m  => map.removeLayer(m));
+  } else {
+    btnRed.className = 'filter-btn active-red';
+    hungerMarkers.forEach(m  => m.addTo(map));
+    surplusMarkers.forEach(m => map.removeLayer(m));
+  }
+}
+</script>
+</body>
+</html>
